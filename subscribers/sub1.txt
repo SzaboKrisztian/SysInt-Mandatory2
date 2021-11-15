@@ -1,3 +1,0 @@
-name1,host1
-topic1,format1
-topic2,format2

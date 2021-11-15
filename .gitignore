@@ -1,5 +1,3 @@
 node_modules
 subscribers
 topics
-subscribers/**
-topics/**
