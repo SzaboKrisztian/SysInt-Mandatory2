@@ -1,0 +1,17 @@
+{
+  "name": "mandatory2",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "csv": "^5.5.3",
+    "entities": "^3.0.1",
+    "express": "^4.17.1",
+    "xml-js": "^1.6.11"
+  }
+}
