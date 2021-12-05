@@ -3,13 +3,22 @@ const { } = require('./persistence');
 const axios = require('axios').default;
 
 const db = {
-    publishers: {},
+    publishers: {
+        a: { test: 'json' }
+    },
     subscribers: {},
-    topics: {},
+    topics: {
+        test: []
+    },
+}
+
+module.exports.getTopics = function getTopics() {
+    return Object.keys(db.topics);
 }
 
 function generatePublisherId() {
     let id = null;
+
     do {
         id = Math.random().toString(36).substr(2, 8);
     } while (Object.keys(db.publishers).includes(id));
@@ -17,7 +26,9 @@ function generatePublisherId() {
     return id;
 }
 
-function subscribe(host, topic, format) {
+module.exports.subscribe = function subscribe(args) {
+    const { host, topic, format } = args;
+
     if (!fmts.supported.includes(format)) {
         throw new Error("Unknown format");
     }
@@ -40,7 +51,9 @@ function subscribe(host, topic, format) {
     }
 }
 
-function unsubscribe(host, topic) {
+module.exports.unsubscribe = function unsubscribe(args) {
+    const { host, topic } = args;
+
     if (!db.subscribers[host] || !db.subscribers[host][topic]) {
         throw new Error("Subscription not found");
     }
@@ -58,15 +71,16 @@ function unsubscribe(host, topic) {
     }
 }
 
-function register(topic, format) {
+module.exports.register = function register(args) {
+    const { topic, format } = args;
+
     if (!fmts.supported.includes(format)) {
         throw new Error("Unknown format");
     }
 
     const id = generatePublisherId();
     db.publishers[id] = {
-        topic,
-        format
+        [topic]: format
     }
 
     if (!Object.keys(db.topics).includes(topic)) {
@@ -80,7 +94,8 @@ function register(topic, format) {
     }
 }
 
-function post(id, topic, message) {
+module.exports.post = function post(args) {
+    const { id, topic, message } = args;
     if (!db.publishers[id]) {
         throw new Error("Must register before posting message to a topic.");
     }
@@ -89,16 +104,15 @@ function post(id, topic, message) {
     let jsonMessage = null;
     switch(format) {
         case 'xml':
-            jsonMessage = fmts.xml2json(message);
+            jsonMessage = JSON.parse(fmts.xml2json(message));
             break;
         case 'csv':
-            jsonMessage = fmts.csv2json(message);
+            jsonMessage = JSON.parse(fmts.csv2json(message));
             break;
         case 'tsv':
-            jsonMessage = fmts.tsv2json(message);
+            jsonMessage = JSON.parse(fmts.tsv2json(message));
             break;
         case 'json':
-            const tmp = JSON.parse(message);
             jsonMessage = message;
             break;
     }
@@ -141,12 +155,18 @@ function notifySubscribers(topic, message) {
         promises.push(axios.post(sub.host, msg));
     });
 
-    return Promise.allSettled(promises).then(res => ({
-        numNotificationsSent: res.filter(e => e.status === 'fulfilled').length
-    }));
+    return Promise.allSettled(promises).then(res => {
+        const numSucceeded = res.filter(e => e.status === 'fulfilled').length;
+        return {
+            total: res.length,
+            successful: numSucceeded,
+            failed: res.length - numSucceeded,
+        };
+    });
 }
 
-function replay(topic, format, timestamp) {
+module.exports.replay = function replay(args) {
+    const { topic, format, timestamp } = args;
     if (!db.topics[topic]) {
         throw new Error("Unknown topic");
     }
@@ -154,53 +174,37 @@ function replay(topic, format, timestamp) {
         throw new Error("Unknown format");
     }
     
+    let ts;
     if (timestamp) {
         try {
             const date = new Date(timestamp);
-            timestamp = date.toISOString();
+            ts = date.toISOString();
         } catch (err) {
             throw new Error("Invalid timestamp");
         }
     }
-    const startIdx = db.topics[topic].findIndex(msg => msg.timestamp >= timestamp);
+    const startIdx = db.topics[topic]
+        .findIndex(msg => msg.timestamp >= ts);
 
-    let convertFn;
+    let convert;
     switch (format) {
         case 'csv':
-            convertFn = fmts.json2csv;
+            convert = fmts.json2csv;
             break;
         case 'json':
-            convertFn = function(data) { return data; };
+            convert = data => data;
             break;
         case 'tsv':
-            convertFn = fmts.json2tsv;
+            convert = fmts.json2tsv;
             break;
         case 'xml':
-            convertFn = fmts.json2xml;
+            convert = fmts.json2xml;
             break;
     }
 
     const messages = db.topics[topic]
         .slice(startIdx < 0 ? 0 : startIdx)
-        .map(msg => convertFn(msg));
+        .map(msg => msg.content);
 
-    return messages;
-}
-
-module.exports = {
-    getTopics() {
-        return Object.keys(db.topics);
-    },
-    registerProducer(args) {
-        return register(args.host, args.topic, args.format);
-    },
-    registerSubscriber(args) {
-        return subscribe(args.name, args.host, args.subscriptions);
-    },
-    replayMessages(args) {
-        return replay(args.topic, args.format, args.timestamp);
-    },
-    postMessage(args) {
-        return post(args.topic, args.message);
-    }
+    return convert(messages);
 }

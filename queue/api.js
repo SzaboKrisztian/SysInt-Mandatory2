@@ -1,10 +1,10 @@
 const fastify = require('fastify')({ logger: true });
 const {
     getTopics,
-    registerProducer,
-    registerSubscriber,
-    replayMessages,
-    postMessage
+    register,
+    subscribe,
+    replay,
+    post
 } = require('./controller');
 
 fastify.get('/', (req, res) => {
@@ -44,24 +44,55 @@ fastify.get('/', (req, res) => {
     };
 });
 
-fastify.get('/api/topics', (req, res) => {
-    return getTopics(req.body);
+fastify.get('/api/topic', (req, res) => {
+    return getTopics();
 });
 
-fastify.get('/api/messages', (req, res) => {
-    return replayMessages(req.body);
+fastify.get('/api/message', (req, res) => {
+    let contentType;
+    switch (req.query.format) {
+        case 'json':
+            contentType = 'application/json; charset=utf-8';
+            break;
+        case 'csv':
+            contentType = 'text/csv; charset=utf-8';
+            break;
+        case 'tsv':
+            contentType = 'text/tab-separated-values; charset=utf-8';
+            break;
+        case 'xml':
+            contentType = 'application/xml; charset=utf-8';
+            break;
+    } 
+    try {
+        return res.header('content-type', contentType).send(replay(req.query));
+    } catch (err) {
+        res.status(400).send(err.message);
+    }
 });
 
-fastify.post('/api/producers', (req, res) => {
-    return registerProducer(req.body);
+fastify.post('/api/producer', (req, res) => {
+    try {
+        return register(req.body);
+    } catch (err) {
+        res.status(400).send(err.message);
+    }
 });
 
-fastify.post('/api/subscribers', (req, res) => {
-    return registerSubscriber(req.body);
+fastify.post('/api/subscriber', (req, res) => {
+    try {
+        return subscribe(req.body);
+    } catch (err) {
+        res.status(400).send(err.message);
+    }
 });
 
-fastify.post('/api/messages', (req, res) => {
-    return postMessage(req.body);
+fastify.post('/api/message', (req, res) => {
+    try {
+        return post(req.body);
+    } catch (err) {
+        res.status(400).send(err.message);
+    }
 });
 
 function init(port = 3000) {

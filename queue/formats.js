@@ -7,12 +7,14 @@ module.exports = {
     csv2json(data) {
         return csvDecode(data, {
             delimiter: ',',
+            header: true,
             skipEmptyLines: true,
         });
     },
     tsv2json(data) {
         return csvDecode(data, {
             delimiter: '\t',
+            header: true,
             skipEmptyLines: true,
         });
     },
@@ -22,13 +24,17 @@ module.exports = {
         });
     },
     json2csv(data) {
+        data = Array.isArray(data) ? data : [data];
         return csvEncode(data, {
-            delimiter: ','
+            delimiter: ',',
+            header: true
         });
     },
     json2tsv(data) {
+        data = Array.isArray(data) ? data : [data];
         return csvEncode(data, {
-            delimiter: '\t'
+            delimiter: '\t',
+            header: true
         });
     },
     json2xml(data) {
