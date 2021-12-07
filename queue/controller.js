@@ -1,5 +1,5 @@
 const fmts = require('./formats');
-const { getMessages, saveMessage, savePubsSubs, loadPubsSubs } = require('./persistence');
+const { getMessages, saveMessage, savePubsSubs, loadPubsSubs, clearTopic, clearAllTopics, deletePubSubFile } = require('./persistence');
 const { formatDate, generateId } = require('./utils')
 const axios = require('axios').default;
 
@@ -26,33 +26,48 @@ db = {
 }
 */
 
-const persistedData = loadPubsSubs();
-const db = persistedData ?? {
-    publishers: {},
-    subscribers: {},
-    topics: {},
+const args = process.argv.slice(2);
+const coldStart = args.includes('--cold');
+const reset = args.includes('--reset');
+if (reset) {
+    deletePubSubFile();
+    clearAllTopics();
 }
+const persistedData = coldStart || reset ? null : loadPubsSubs();
+const db = persistedData
+    ? {
+        ...persistedData,
+        topics: {},
+    }
+    : {
+        publishers: {},
+        subscribers: {},
+        topics: {},
+    }
 
 setInterval(() => {
     let topics = 0;
     let successes = 0;
     let failures = 0;
+    const promises = [];
     Object.keys(db.topics).forEach(topic => {
         topics += db.topics[topic].length > 0 ? 1 : 0;
         while (db.topics[topic].length > 0) {
             const entry = db.topics[topic].splice(0, 1)[0];
-            notifySubscribers(topic, entry.content)
+            promises.push(notifySubscribers(topic, entry.content)
                 .then(res => {
                     if (res.total > 0) {
                         successes += res.successful;
                         failures += res.failed;
                     }
-                });
+                }));
         }
     });
-    if (topics > 0) {
-        console.log(`${formatDate(new Date())}: Successfully notified ${successes} subscribers in ${topics} topics. ${failures} failures.`);
-    }
+    Promise.allSettled(promises).then(res => {
+        if (topics > 0) {
+            console.log(`${formatDate(new Date())}: Successfully notified ${successes} subscribers in ${topics} topics. ${failures} failures.`);
+        }
+    });
 }, CHECK_QUEUE_INTERVAL_MS);
 
 module.exports.getTopics = function getTopics() {
@@ -86,6 +101,7 @@ module.exports.subscribe = function subscribe(args) {
         }        
     });
 
+    savePubsSubs(db);
     return {
         id,
         subscribed: Object.keys(db.subscribers[id]).map(topic => ({ topic, ...db.subscribers[id][topic] })),
@@ -118,6 +134,7 @@ module.exports.unsubscribe = function unsubscribe(args) {
         } catch (err) {}
     })
 
+    savePubsSubs(db);
     if (Object.keys(subscriptions).length === 0) {
         delete db.subscribers[id];
         return {
@@ -157,6 +174,7 @@ module.exports.register = function register(args) {
         }
     });
 
+    savePubsSubs(db);
     return {
         id,
         registered: validEntries,
@@ -188,19 +206,19 @@ module.exports.post = function post(args) {
             break;
     }
 
-    db.topics[topic].push({
+    const result = {
         timestamp: new Date().valueOf(),
         content: jsonMessage
-    });
+    };
+    db.topics[topic].push(result);
+    saveMessage(topic, result).catch(console.error);
 }
 
 async function notifySubscribers(topic, message) {
-    console.log('Notify called with', { topic, message });
     const subscribers = Object
         .keys(db.subscribers)
         .filter(id => db.subscribers[id] && db.subscribers[id][topic])
         .map(id => db.subscribers[id][topic]);
-    console.log({subscribers});
 
     const csv = subscribers.some(sub => sub.format === 'csv') ? fmts.json2csv(message) : null;
     const tsv = subscribers.some(sub => sub.format === 'tsv') ? fmts.json2tsv(message) : null;
@@ -224,12 +242,10 @@ async function notifySubscribers(topic, message) {
                 break;
         }
 
-        console.log('Notifying', sub.host, { topic, message: msg });
-        promises.push(axios.post(sub.host, { topic, message: msg }));
+        promises.push(axios.post(`http://${sub.host}`, { topic, message: msg }));
     });
 
     const res = await Promise.allSettled(promises);
-    console.log({res});
     const numSucceeded = res.filter(e => e.status === 'fulfilled').length;
     return {
         total: res.length,

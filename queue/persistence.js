@@ -8,10 +8,10 @@ fsp.mkdir(FS_ROOT).catch(() => {});
 
 const PUBSUB_FILE = path.resolve(FS_ROOT, 'pubsub.json');
 
-module.exports.readTopics = function readTopics() {
-    return fsp.readdir(FS_TOPICS, { withFileTypes: true })
-        .then(data => data.filter(item => item.isDirectory()))
-        .then(dirs => dirs.map(dir => dir.name));
+module.exports.readTopics = async function readTopics() {
+    const data = await fsp.readdir(FS_ROOT, { withFileTypes: true });
+    return data.filter(item => item.isDirectory())
+        .map(dir => dir.name);
 }
 
 module.exports.saveMessage = async function(topic, message) {
@@ -22,12 +22,7 @@ module.exports.saveMessage = async function(topic, message) {
         fs.mkdirSync(topicPath);
     }
 
-    try {
-        await fsp.writeFile(path.resolve(topicPath, `${timestamp}.json`), JSON.stringify(content));
-        return true;
-    } catch (err) {
-        return false;
-    }
+    return fsp.writeFile(path.resolve(topicPath, `${timestamp}.json`), JSON.stringify(content), { encoding: 'utf-8' });
 }
 
 module.exports.getMessages = async function(topic, timestamp) {
@@ -48,8 +43,9 @@ module.exports.getMessages = async function(topic, timestamp) {
 }
 
 module.exports.savePubsSubs = async function(data) {
+    const toSave = { subscribers: data.subscribers, publishers: data.publishers };
     try {
-        await fsp.writeFile(PUBSUB_FILE, JSON.stringify(data), { encoding: 'utf-8' });
+        await fsp.writeFile(PUBSUB_FILE, JSON.stringify(toSave), { encoding: 'utf-8' });
         return true;
     } catch (err) {
         return false;
@@ -61,5 +57,24 @@ module.exports.loadPubsSubs = function() {
         return JSON.parse(fs.readFileSync(PUBSUB_FILE, { encoding: 'utf-8' }));
     } catch (err) {
         return null;
+    }
+}
+
+module.exports.clearTopic = function(topic) {
+    const topicPath = path.resolve(FS_ROOT, topic);
+    fsp.readdir(topicPath, { withFileTypes: true })
+        .then(data => data.filter(item => item.isFile()))
+        .then(files => files.forEach(file => fs.rmSync(path.resolve(topicPath, file.name))));
+}
+
+module.exports.clearAllTopics = function() {
+    module.exports.readTopics().then(dirs => {
+        dirs.forEach(dir => module.exports.clearTopic(dir));
+    });
+}
+
+module.exports.deletePubSubFile = function() {
+    if (fs.existsSync(PUBSUB_FILE)) {
+        fs.rmSync(PUBSUB_FILE);
     }
 }

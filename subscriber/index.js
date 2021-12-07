@@ -1,11 +1,11 @@
-const fastify = require('fastify')({ logger: true });
+const fastify = require('fastify')({ logger: false });
 const axios = require('axios').default;
 
 const PORT = 7878;
 const HOST = '127.0.0.1';
 const QUEUE_PORT = 3000;
 const QUEUE_HOST = '127.0.0.1';
-const queue = `${QUEUE_HOST}:${QUEUE_PORT}`;
+const queueAddress = `${QUEUE_HOST}:${QUEUE_PORT}`;
 
 const MIN_SUBS = 3;
 const MAX_SUBS = 5;
@@ -34,14 +34,15 @@ const subscribers = Array.from(new Array(numSubs).keys()).map(idx => {
 });
 
 fastify.post('/:subscriber', (req, res) => {
-    console.log(`${new Date().toLocaleString('en-GB', { hour12: false })}: ${req.params.subscriber} - ${req.body.topic}\n${req.body.message}`);
+    const msg = req.body.message.trim().replace(/\n/g, '\n    ');
+    console.log(`\n${new Date().toLocaleString('en-GB', { hour12: false })}: ${req.params.subscriber} - ${req.body.topic}\n    ${msg}`);
     res.status(200).send();
 });
 
 try {
     const promises = [];
     subscribers.forEach(sub => {
-        promises.push(axios.post(`http://${queue}/api/subscriber`, {
+        promises.push(axios.post(`http://${queueAddress}/api/subscriber`, {
             host: sub.host,
             topics: sub.topics
         }));
