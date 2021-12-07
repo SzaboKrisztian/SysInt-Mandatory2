@@ -102,10 +102,15 @@ fastify.post('/api/subscriber', (req, res) => {
 
 fastify.post('/api/message', (req, res) => {
     try {
-        return post(req.body);
+        post(req.body);
+        res.send();
     } catch (err) {
         res.status(400).send(err.message);
     }
+});
+
+fastify.delete('/api/subscriber', (req, res) => {
+    res.send();
 });
 
 module.exports.init = function(port = 3000) {

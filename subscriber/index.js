@@ -1,4 +1,4 @@
-const fastify = require('fastify')({ logger: false });
+const fastify = require('fastify')({ logger: true });
 const axios = require('axios').default;
 
 const PORT = 7878;
@@ -18,7 +18,7 @@ const numTopicsPerSub = Math.floor((Math.random() * (MAX_TOPICS_PER_SUB - MIN_TO
 const formats = ['json', 'xml', 'csv', 'tsv'];
 const topics = ['people', 'cars', 'phones', 'laptops', 'movies', 'bands'];
 
-const subscribers = new Array(numSubs).keys().map(idx => {
+const subscribers = Array.from(new Array(numSubs).keys()).map(idx => {
     const chosenTopics = randomChoices(topics, numTopicsPerSub)
         .map(topic => ({
             name: topic,
@@ -41,17 +41,25 @@ fastify.post('/:subscriber', (req, res) => {
 try {
     const promises = [];
     subscribers.forEach(sub => {
-        promises.push(axios.post(`${queue}/api/subscribe`, {
+        promises.push(axios.post(`http://${queue}/api/subscriber`, {
             host: sub.host,
             topics: sub.topics
-        }).then(res => {
-            sub.id = res.data.id;
-            console.log(`${sub.name} subscribed to ${res.data.subscribed.length} topics. ${res.data.invalid.length} failed.`);
         }));
     });
-
-    fastify.listen(PORT)
-        .then(() => console.log(`Registered ${numSubs} subscribers, with ${numTopicsPerSub} topics each.\nSubscriber server listening on ${PORT}`));
+    Promise.allSettled(promises)
+        .then(res => {
+            res.forEach((e, i) => {
+                if (e.status === 'fulfilled') {
+                    const result = e.value.data;
+                    console.log(`${subscribers[i].name} subscribed to ${result.subscribed.length} topics. ${result.invalid.length} failed.`);
+                    subscribers[i].id = result.id;
+                } else {
+                    console.log(`Error while trying to subscribe ${subscribers[i].name}`);
+                }
+            });
+            fastify.listen(PORT)
+                .then(() => console.log(`Subscriber server listening on ${PORT}`))
+        });
 } catch (err) {
     fastify.log.error(err);
     process.exit(1);

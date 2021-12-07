@@ -40,7 +40,7 @@ setInterval(() => {
     Object.keys(db.topics).forEach(topic => {
         topics += db.topics[topic].length > 0 ? 1 : 0;
         while (db.topics[topic].length > 0) {
-            const entry = db.topics[topic].splice(0, 1);
+            const entry = db.topics[topic].splice(0, 1)[0];
             notifySubscribers(topic, entry.content)
                 .then(res => {
                     if (res.total > 0) {
@@ -51,7 +51,7 @@ setInterval(() => {
         }
     });
     if (topics > 0) {
-        console.log(`${formatDate(new Date())}: Successfully notified ${res.successful}/${res.total} subscribers. ${res.failed} failures.`);
+        console.log(`${formatDate(new Date())}: Successfully notified ${successes} subscribers in ${topics} topics. ${failures} failures.`);
     }
 }, CHECK_QUEUE_INTERVAL_MS);
 
@@ -155,7 +155,7 @@ module.exports.register = function register(args) {
         if (!Object.keys(db.topics).includes(entry.name)) {
             db.topics[entry.name] = [];
         }
-    })
+    });
 
     return {
         id,
@@ -167,8 +167,8 @@ module.exports.register = function register(args) {
 // args: { id: string, topic: string: message: string }
 module.exports.post = function post(args) {
     const { id, topic, message } = args;
-    if (!db.publishers[id]) {
-        throw new Error("Must register before posting message to a topic.");
+    if (!db.publishers[id] || !db.publishers[id][topic]) {
+        throw new Error("Must register to topic before posting a message.");
     }
 
     const format = db.publishers[id][topic];
@@ -195,10 +195,12 @@ module.exports.post = function post(args) {
 }
 
 async function notifySubscribers(topic, message) {
+    console.log('Notify called with', { topic, message });
     const subscribers = Object
         .keys(db.subscribers)
-        .filter(host => db.subscribers[host][topic] !== undefined)
-        .map(host => ({ host, format: db.subscribers[host][topic] }));
+        .filter(id => db.subscribers[id] && db.subscribers[id][topic])
+        .map(id => db.subscribers[id][topic]);
+    console.log({subscribers});
 
     const csv = subscribers.some(sub => sub.format === 'csv') ? fmts.json2csv(message) : null;
     const tsv = subscribers.some(sub => sub.format === 'tsv') ? fmts.json2tsv(message) : null;
@@ -222,10 +224,12 @@ async function notifySubscribers(topic, message) {
                 break;
         }
 
+        console.log('Notifying', sub.host, { topic, message: msg });
         promises.push(axios.post(sub.host, { topic, message: msg }));
     });
 
     const res = await Promise.allSettled(promises);
+    console.log({res});
     const numSucceeded = res.filter(e => e.status === 'fulfilled').length;
     return {
         total: res.length,
