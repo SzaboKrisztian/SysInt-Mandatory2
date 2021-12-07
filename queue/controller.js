@@ -1,99 +1,170 @@
 const fmts = require('./formats');
-const { } = require('./persistence');
+const { getMessages, saveMessage, savePubsSubs, loadPubsSubs } = require('./persistence');
+const { formatDate, generateId } = require('./utils')
 const axios = require('axios').default;
 
-const db = {
+CHECK_QUEUE_INTERVAL_MS = 500;
+
+/*
+db = {
     publishers: {
-        a: { test: 'json' }
+        [id: string]: {
+            [topicName: string]: string // The value is the format
+        }
     },
-    subscribers: {},
+    subscribers: {
+        [id: string]: {
+            [topicName: string]: {
+                host: string,
+                format: string,
+            }
+        }
+    },
     topics: {
-        test: []
-    },
+        [topicName: string]: { timestamp: string, content: Object }[]
+    }
 }
+*/
+
+const persistedData = loadPubsSubs();
+const db = persistedData ?? {
+    publishers: {},
+    subscribers: {},
+    topics: {},
+}
+
+setInterval(() => {
+    let topics = 0;
+    let successes = 0;
+    let failures = 0;
+    Object.keys(db.topics).forEach(topic => {
+        topics += db.topics[topic].length > 0 ? 1 : 0;
+        while (db.topics[topic].length > 0) {
+            const entry = db.topics[topic].splice(0, 1);
+            notifySubscribers(topic, entry.content)
+                .then(res => {
+                    if (res.total > 0) {
+                        successes += res.successful;
+                        failures += res.failed;
+                    }
+                });
+        }
+    });
+    if (topics > 0) {
+        console.log(`${formatDate(new Date())}: Successfully notified ${res.successful}/${res.total} subscribers. ${res.failed} failures.`);
+    }
+}, CHECK_QUEUE_INTERVAL_MS);
 
 module.exports.getTopics = function getTopics() {
     return Object.keys(db.topics);
 }
 
-function generatePublisherId() {
-    let id = null;
-
-    do {
-        id = Math.random().toString(36).substr(2, 8);
-    } while (Object.keys(db.publishers).includes(id));
-
-    return id;
-}
-
+// args: { host: string, topics: { name: string, format: string }[] }
 module.exports.subscribe = function subscribe(args) {
-    const { host, topic, format } = args;
+    const { host, topics } = args;
 
-    if (!fmts.supported.includes(format)) {
-        throw new Error("Unknown format");
+    let id = args?.id ?? generateId();
+
+    const invalidEntries = topics.filter(t => !fmts.supported.includes(t.format));
+    if (invalidEntries.length > 0) {
+        throw new Error("Unknown format, ignoring:", invalidEntries);
     }
 
-    const subscriptions = db.subscribers[host] ?? {};
-
-    if (subscriptions[topic] === format) {
-        throw new Error("Identical subscription already exists. No action taken.")
-    } else {
-        subscriptions[topic] = format;
+    if (!db.subscribers[id]) {
+        db.subscribers[id] = {};
     }
+    const subscriptions = db.subscribers[id];
 
-    if (!Object.keys(db.topics).includes(topic)) {
-        db.topics[topic] = [];
-    }
+    const validEntries = topics.filter(t => !invalidEntries.includes(t));
+    validEntries.forEach(topic => {
+        if (!(subscriptions[topic.name]?.format === topic.format && subscriptions[topic.name]?.host === host)) {
+            subscriptions[topic.name] = { host, format: topic.format };
 
-    return {
-        host,
-        subscriptions: Object.keys(subscriptions).map(key => ({ topic: key, format: subscriptions[key] }))
-    }
-}
-
-module.exports.unsubscribe = function unsubscribe(args) {
-    const { host, topic } = args;
-
-    if (!db.subscribers[host] || !db.subscribers[host][topic]) {
-        throw new Error("Subscription not found");
-    }
-
-    const subscriptions = db.subscribers[host];
-    delete subscriptions[topic];
-
-    if (Object.keys(subscriptions).length === 0) {
-        delete db.subscribers[host];
-    }
-
-    return {
-        host,
-        subscriptions: Object.keys(subscriptions).map(key => ({ topic: key, format: subscriptions[key] }))
-    }
-}
-
-module.exports.register = function register(args) {
-    const { topic, format } = args;
-
-    if (!fmts.supported.includes(format)) {
-        throw new Error("Unknown format");
-    }
-
-    const id = generatePublisherId();
-    db.publishers[id] = {
-        [topic]: format
-    }
-
-    if (!Object.keys(db.topics).includes(topic)) {
-        db.topics[topic] = [];
-    }
+            if (!Object.keys(db.topics).includes(topic.name)) {
+                db.topics[topic] = [];
+            }
+        }        
+    });
 
     return {
         id,
-        topic,
-        format
+        subscribed: Object.keys(db.subscribers[id]).map(topic => ({ topic, ...db.subscribers[id][topic] })),
+        invalid: invalidEntries
     }
 }
 
+// args: { id: string, topics: string[]? }
+module.exports.unsubscribe = function unsubscribe(args) {
+    const { id, topics } = args;
+
+    if (!db.subscribers[id]) {
+        throw new Error("Subscription id not found");
+    }
+
+    if (!topics || topics.length === 0) {
+        delete db.subscribers[id];
+        return {
+            id,
+            message: 'Unsubscribed from all topics.'
+        }
+    }
+
+    const subscriptions = db.subscribers[id];
+    topics.forEach(topic => {
+        let count = 0;
+        try {
+            delete subscriptions[topic];
+            count += 1;
+        } catch (err) {}
+    })
+
+    if (Object.keys(subscriptions).length === 0) {
+        delete db.subscribers[id];
+        return {
+            id,
+            message: 'Unsubscribed from all topics.'
+        }
+    } else {
+        return {
+            message: `Unsubscribed from ${count} topics.`,
+            remaining: Object.keys(subscriptions).map(key => ({ topic: key, ...subscriptions[key] }))
+        }
+    }
+}
+
+// args: { id: string?, topics: { name: string, format: string }[] }
+module.exports.register = function register(args) {
+    const { topics } = args;
+
+    let id = args?.id ?? generateId();
+
+    if (!db.publishers[id]) {
+        db.publishers[id] = {}
+    }
+    const publisher = db.publishers[id];
+
+    const invalidEntries = topics.filter(t => !fmts.supported.includes(t.format));
+    if (invalidEntries.length > 0) {
+        throw new Error("Unknown format, ignoring:", invalidEntries);
+    }
+
+    const validEntries = topics.filter(t => !invalidEntries.includes(t));
+    validEntries.forEach(entry => {
+        publisher[entry.name] = entry.format;
+
+        if (!Object.keys(db.topics).includes(entry.name)) {
+            db.topics[entry.name] = [];
+        }
+    })
+
+    return {
+        id,
+        registered: validEntries,
+        invalid: invalidEntries
+    }
+}
+
+// args: { id: string, topic: string: message: string }
 module.exports.post = function post(args) {
     const { id, topic, message } = args;
     if (!db.publishers[id]) {
@@ -116,15 +187,14 @@ module.exports.post = function post(args) {
             jsonMessage = message;
             break;
     }
+
     db.topics[topic].push({
-        timestamp: new Date().toISOString(),
+        timestamp: new Date().valueOf(),
         content: jsonMessage
     });
-
-    return notifySubscribers(topic, jsonMessage);
 }
 
-function notifySubscribers(topic, message) {
+async function notifySubscribers(topic, message) {
     const subscribers = Object
         .keys(db.subscribers)
         .filter(host => db.subscribers[host][topic] !== undefined)
@@ -142,7 +212,7 @@ function notifySubscribers(topic, message) {
                 msg = csv;
                 break;
             case 'json':
-                msg = message;
+                msg = JSON.stringify(message);
                 break;
             case 'tsv':
                 msg = tsv;
@@ -152,20 +222,20 @@ function notifySubscribers(topic, message) {
                 break;
         }
 
-        promises.push(axios.post(sub.host, msg));
+        promises.push(axios.post(sub.host, { topic, message: msg }));
     });
 
-    return Promise.allSettled(promises).then(res => {
-        const numSucceeded = res.filter(e => e.status === 'fulfilled').length;
-        return {
-            total: res.length,
-            successful: numSucceeded,
-            failed: res.length - numSucceeded,
-        };
-    });
+    const res = await Promise.allSettled(promises);
+    const numSucceeded = res.filter(e => e.status === 'fulfilled').length;
+    return {
+        total: res.length,
+        successful: numSucceeded,
+        failed: res.length - numSucceeded,
+    };
 }
 
-module.exports.replay = function replay(args) {
+// args: { topic: string, format: string, timestamp: string? }
+module.exports.replay = async function replay(args) {
     const { topic, format, timestamp } = args;
     if (!db.topics[topic]) {
         throw new Error("Unknown topic");
@@ -173,18 +243,6 @@ module.exports.replay = function replay(args) {
     if (!fmts.supported.includes(format)) {
         throw new Error("Unknown format");
     }
-    
-    let ts;
-    if (timestamp) {
-        try {
-            const date = new Date(timestamp);
-            ts = date.toISOString();
-        } catch (err) {
-            throw new Error("Invalid timestamp");
-        }
-    }
-    const startIdx = db.topics[topic]
-        .findIndex(msg => msg.timestamp >= ts);
 
     let convert;
     switch (format) {
@@ -202,9 +260,6 @@ module.exports.replay = function replay(args) {
             break;
     }
 
-    const messages = db.topics[topic]
-        .slice(startIdx < 0 ? 0 : startIdx)
-        .map(msg => msg.content);
-
-    return convert(messages);
+    return getMessages(topic, timestamp)
+        .then(messages => convert(messages));
 }

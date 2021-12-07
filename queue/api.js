@@ -1,8 +1,9 @@
-const fastify = require('fastify')({ logger: true });
+const fastify = require('fastify')({ logger: false });
 const {
     getTopics,
     register,
     subscribe,
+    unsubscribe,
     replay,
     post
 } = require('./controller');
@@ -11,36 +12,46 @@ fastify.get('/', (req, res) => {
     return {
         endpoints: [
             {
-                endpoint: '/api/topics',
+                endpoint: '/api/topic',
                 method: 'GET'
             },
             {
-                endpoint: '/api/messages',
+                endpoint: '/api/message',
                 method: 'GET',
-                params: { topic: 'string', timestamp: 'string?' }
+                queryParams: { topic: 'string', format: 'string', timestamp: 'string?' }
             },
             {
-                endpoint: '/api/producers',
+                endpoint: '/api/producer',
                 method: 'POST',
-                params: { host: 'string', topic: 'string', format: 'string' }
+                body: { id: 'string?', topics: [{ name: 'string', format: 'string' }] }
             },
             {
-                endpoint: '/api/subscribers',
+                endpoint: '/api/subscriber',
                 method: 'POST',
-                params: {
-                    topics: [{ topic: 'string', format: 'string' }],
-                    host: 'string'
+                body: {
+                    host: 'string',
+                    topics: [{ name: 'string', format: 'string' }],
                 }
             },
             {
-                endpoint: '/api/messages',
+                endpoint: '/api/message',
                 method: 'POST',
-                params: {
-                    body: 'string'
+                body: {
+                    id: 'string',
+                    topic: 'string',
+                    message: 'string'
+                }
+            },
+            {
+                endpoint: '/api/subscriber',
+                method: 'DELETE',
+                queryParams: {
+                    id: 'string',
+                    topics: ['string'],
                 }
             },
         ],
-        formats: ['json', 'xml', 'csv', 'tsv']
+        formats: ['json', 'xml', 'csv', 'tsv'],
     };
 });
 
@@ -48,24 +59,26 @@ fastify.get('/api/topic', (req, res) => {
     return getTopics();
 });
 
-fastify.get('/api/message', (req, res) => {
-    let contentType;
-    switch (req.query.format) {
-        case 'json':
-            contentType = 'application/json; charset=utf-8';
-            break;
-        case 'csv':
-            contentType = 'text/csv; charset=utf-8';
-            break;
-        case 'tsv':
-            contentType = 'text/tab-separated-values; charset=utf-8';
-            break;
-        case 'xml':
-            contentType = 'application/xml; charset=utf-8';
-            break;
-    } 
+fastify.get('/api/message', async (req, res) => {
     try {
-        return res.header('content-type', contentType).send(replay(req.query));
+        let contentType;
+        switch (req.query.format) {
+            case 'json':
+                contentType = 'application/json; charset=utf-8';
+                break;
+            case 'csv':
+                contentType = 'text/csv; charset=utf-8';
+                break;
+            case 'tsv':
+                contentType = 'text/tab-separated-values; charset=utf-8';
+                break;
+            case 'xml':
+                contentType = 'application/xml; charset=utf-8';
+                break;
+            default:
+                throw new Error("Invalid format");
+        }
+        return res.header('content-type', contentType).send(await replay(req.query));
     } catch (err) {
         res.status(400).send(err.message);
     }
@@ -95,7 +108,7 @@ fastify.post('/api/message', (req, res) => {
     }
 });
 
-function init(port = 3000) {
+module.exports.init = function(port = 3000) {
     try {
         return fastify.listen(port)
             .then(() => console.log(`Server listening on ${port}`));
@@ -104,5 +117,3 @@ function init(port = 3000) {
         process.exit(1);
     }
 }
-
-module.exports = { init };
