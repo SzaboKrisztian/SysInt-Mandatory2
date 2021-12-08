@@ -1,6 +1,6 @@
 const fmts = require('./formats');
 const { getMessages, saveMessage, savePubsSubs, loadPubsSubs, clearTopic, clearAllTopics, deletePubSubFile } = require('./persistence');
-const { formatDate, generateId } = require('./utils')
+const { generateId, log } = require('./utils')
 const axios = require('axios').default;
 
 CHECK_QUEUE_INTERVAL_MS = 500;
@@ -65,7 +65,7 @@ setInterval(() => {
     });
     Promise.allSettled(promises).then(res => {
         if (topics > 0) {
-            console.log(`${formatDate(new Date())}: Successfully notified ${successes} subscribers in ${topics} topics. ${failures} failures.`);
+            log(`Successfully notified ${successes} subscribers in ${topics} topics. ${failures} failures.`);
         }
     });
 }, CHECK_QUEUE_INTERVAL_MS);
@@ -81,9 +81,6 @@ module.exports.subscribe = function subscribe(args) {
     let id = args?.id ?? generateId();
 
     const invalidEntries = topics.filter(t => !fmts.supported.includes(t.format));
-    if (invalidEntries.length > 0) {
-        throw new Error("Unknown format, ignoring:", invalidEntries);
-    }
 
     if (!db.subscribers[id]) {
         db.subscribers[id] = {};
@@ -100,6 +97,8 @@ module.exports.subscribe = function subscribe(args) {
             }
         }        
     });
+
+    log(`Subscriber id ${id} subscribed to topics:`, JSON.stringify(validEntries));
 
     savePubsSubs(db);
     return {
@@ -119,6 +118,9 @@ module.exports.unsubscribe = function unsubscribe(args) {
 
     if (!topics || topics.length === 0) {
         delete db.subscribers[id];
+
+        log(`Subscriber id ${id} unsubscribed from all topics.`);
+
         return {
             id,
             message: 'Unsubscribed from all topics.'
@@ -126,13 +128,15 @@ module.exports.unsubscribe = function unsubscribe(args) {
     }
 
     const subscriptions = db.subscribers[id];
+    const unsubscribed = [];
     topics.forEach(topic => {
-        let count = 0;
-        try {
+        if (subscriptions[topic]) {
+            unsubscribed.push(topic);
             delete subscriptions[topic];
-            count += 1;
-        } catch (err) {}
-    })
+        }
+    });
+
+    log(`Subscriber id ${id}:\n    - unsubscribed from ${unsubscribed}\n    - remaining subscriptions: ${subscriptions}`);
 
     savePubsSubs(db);
     if (Object.keys(subscriptions).length === 0) {
@@ -161,9 +165,6 @@ module.exports.register = function register(args) {
     const publisher = db.publishers[id];
 
     const invalidEntries = topics.filter(t => !fmts.supported.includes(t.format));
-    if (invalidEntries.length > 0) {
-        throw new Error("Unknown format, ignoring:", invalidEntries);
-    }
 
     const validEntries = topics.filter(t => !invalidEntries.includes(t));
     validEntries.forEach(entry => {
@@ -173,6 +174,8 @@ module.exports.register = function register(args) {
             db.topics[entry.name] = [];
         }
     });
+
+    log(`Publisher id ${id} registered to topics:`, JSON.stringify(validEntries));
 
     savePubsSubs(db);
     return {
@@ -189,29 +192,36 @@ module.exports.post = function post(args) {
         throw new Error("Must register to topic before posting a message.");
     }
 
-    const format = db.publishers[id][topic];
-    let jsonMessage = null;
-    switch(format) {
-        case 'xml':
-            jsonMessage = JSON.parse(fmts.xml2json(message));
-            break;
-        case 'csv':
-            jsonMessage = JSON.parse(fmts.csv2json(message));
-            break;
-        case 'tsv':
-            jsonMessage = JSON.parse(fmts.tsv2json(message));
-            break;
-        case 'json':
-            jsonMessage = message;
-            break;
-    }
+    try {
+        const format = db.publishers[id][topic];
+        let jsonMessage = null;
+        switch(format) {
+            case 'xml':
+                jsonMessage = JSON.parse(fmts.xml2json(message));
+                break;
+            case 'csv':
+                jsonMessage = JSON.parse(fmts.csv2json(message));
+                break;
+            case 'tsv':
+                jsonMessage = JSON.parse(fmts.tsv2json(message));
+                break;
+            case 'json':
+                jsonMessage = message;
+                break;
+        }
 
-    const result = {
-        timestamp: new Date().valueOf(),
-        content: jsonMessage
-    };
-    db.topics[topic].push(result);
-    saveMessage(topic, result).catch(console.error);
+        const result = {
+            timestamp: new Date().valueOf(),
+            content: jsonMessage
+        };
+
+        log(`Received message from publisher ${id} in topic "${topic}"`);
+
+        db.topics[topic].push(result);
+        saveMessage(topic, result).catch(console.error);
+    } catch (err) {
+        console.error(err);
+    }
 }
 
 async function notifySubscribers(topic, message) {

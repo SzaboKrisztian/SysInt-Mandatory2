@@ -7,6 +7,7 @@ const {
     replay,
     post
 } = require('./controller');
+const { xml2json, tsv2json, csv2json } = require('./formats');
 
 fastify.get('/', (req, res) => {
     return {
@@ -21,7 +22,7 @@ fastify.get('/', (req, res) => {
                 queryParams: { topic: 'string', format: 'string', timestamp: 'string?' }
             },
             {
-                endpoint: '/api/producer',
+                endpoint: '/api/publisher',
                 method: 'POST',
                 body: { id: 'string?', topics: [{ name: 'string', format: 'string' }] }
             },
@@ -84,7 +85,7 @@ fastify.get('/api/message', async (req, res) => {
     }
 });
 
-fastify.post('/api/producer', (req, res) => {
+fastify.post('/api/publisher', (req, res) => {
     try {
         return register(req.body);
     } catch (err) {
@@ -111,6 +112,42 @@ fastify.post('/api/message', (req, res) => {
 
 fastify.delete('/api/subscriber', (req, res) => {
     res.send();
+});
+
+fastify.addContentTypeParser('application/xml', function (request, payload, done) {
+    let err, body;
+    try {
+        body = xml2json(payload);
+    } catch (error) {
+        err = error;
+    }
+    done(err, body);
+});
+
+fastify.addContentTypeParser('text/csv', function (request, payload, done) {
+    console.log('inside csv content parser');
+    let err, body;
+    try {
+        body = csv2json(payload);
+    } catch (error) {
+        err = error;
+    }
+    done(err, body);
+});
+
+fastify.addContentTypeParser('text/tab-separated-values', function (request, payload, done) {
+    console.log(payload.toString());
+    console.log('inside tsv content parser', payload.data);
+    let err, body;
+    try {
+        body = tsv2json(String(payload))[0][0];
+    } catch (error) {
+        err = error;
+    }
+    console.log('finished parsing tsv');
+    console.log('error:', err);
+    console.log('body:', body, typeof body, JSON.stringify(body));
+    done(err, body);
 });
 
 module.exports.init = function(port = 3000) {
