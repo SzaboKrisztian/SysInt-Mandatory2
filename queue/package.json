@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest"
   },
   "author": "",
   "license": "ISC",
@@ -12,6 +12,11 @@
     "csv": "^5.5.3",
     "fastify": "^3.24.0",
     "xml-js": "^1.6.11",
-    "axios": "^0.24.0"
+    "axios": "^0.24.0",
+    "fast-xml-parser": "3.21.1"
+  },
+  "devDependencies": {
+    "jest": "27.4.4",
+    "@types/jest": "27.0.3"
   }
 }
