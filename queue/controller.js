@@ -197,16 +197,16 @@ module.exports.post = function post(args) {
         let jsonMessage = null;
         switch(format) {
             case 'xml':
-                jsonMessage = JSON.parse(fmts.xml2json(message));
+                jsonMessage = fmts.xml2json(message);
                 break;
             case 'csv':
-                jsonMessage = JSON.parse(fmts.csv2json(message));
+                jsonMessage = fmts.csv2json(message);
                 break;
             case 'tsv':
-                jsonMessage = JSON.parse(fmts.tsv2json(message));
+                jsonMessage = fmts.tsv2json(message);
                 break;
             case 'json':
-                jsonMessage = message;
+                jsonMessage = JSON.parse(message);
                 break;
         }
 
@@ -215,7 +215,7 @@ module.exports.post = function post(args) {
             content: jsonMessage
         };
 
-        log(`Received message from publisher ${id} in topic "${topic}"`);
+        log(`Received message from publisher ${id} in topic "${topic}"\n`, { id, topic, message });
 
         db.topics[topic].push(result);
         saveMessage(topic, result).catch(console.error);

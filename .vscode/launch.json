@@ -28,7 +28,8 @@
             "skipFiles": [
                 "<node_internals>/**"
             ],
-            "program": "${workspaceFolder}/queue/index.js"
+            "program": "${workspaceFolder}/queue/index.js",
+            "args": ["--reset"]
         }
     ]
 }

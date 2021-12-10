@@ -27,13 +27,6 @@ Promise.allSettled(promises).then(async (res) => {
     }
     console.log('Registered publishers:', publishers);
 
-    const ids = Object.keys(publishers);
-    const rndId = Object.keys(publishers).find(id => Object.keys(publishers[id]).some(t => publishers[id][t] === 'tsv'));//ids[Math.floor(Math.random() * ids.length)];
-    const rndTopic = topics[Math.floor(Math.random() * topics.length)];
-    const message = JSON.stringify({ number: 42, text: 'Ni!', boolean: true });
-    console.log({ rndId, rndTopic, message });
-    sendMessage(rndId, rndTopic, message);
-
     r.prompt();
     r.on('line', (line) => {
         line = line.trim();
@@ -50,7 +43,7 @@ function executeCommand(command) {
     const args = tokens.slice(1);
     switch (command) {
         case '.help':
-            showHelp(arg);
+            showHelp(args[0]);
             break;
         case '.send':
             sendMessage(...args);
@@ -71,12 +64,19 @@ function showHelp(arg) {
             console.log('Usage:\n.send <id> <topic> <message> - send a message to the queue from a publisher');
             console.log('Message should be JSON, which will be automatically converted to publishers declared format before sending.');
             console.log('If id is *, will attempt to send same message from all publishers.');
+            break;
         case 'help':
+            console.log('Usage:\n.help <command>');
+            console.log('Show help information about the command');            
+            break;
+        case 'quit':
+            console.log('Usage:\n.quit');
+            console.log('Quits the program.');
+            break;
+        default:
+            console.log('Unknown command');
             console.log('Commands:');
             console.log(' .help, .send, .quit');
-        case 'quit':
-            console.log()
-            console.log('Quit the program.');
     }
     
 }
@@ -89,12 +89,18 @@ function sendMessage(id, topic, message) {
     if (id === '*') {
         let sent = 0;
         Object.keys(publishers).forEach(id => {
-            if (sendOne(id, topic, message, false)) {
-                sent += 1;
-            }
+            try {
+                if (sendOne(id, topic, message, false)) {
+                    sent += 1;
+                }
+            } catch {}
         });
         console.log(`Sent message from ${sent}/${Object.keys(publishers).length} publishers.`);
     } else {
+        if (id.length < 20) {
+            const idx = parseInt(id) - 1;
+            id = Object.keys(publishers)[idx];
+        }
         sendOne(id, topic, message);
     }
 }
@@ -107,7 +113,6 @@ function sendOne(id, topic, message, verbose = true) {
     }
 
     let msg;
-    let contentType;
     try {
         msg = JSON.parse(message);
     } catch {
@@ -117,19 +122,15 @@ function sendOne(id, topic, message, verbose = true) {
     switch (format) {
         case 'csv':
             msg = json2csv(msg);
-            contentType = 'text/csv';
             break;
         case 'json':
             msg = message;
-            contentType = 'application/json';
             break;
         case 'tsv':
             msg = json2tsv(msg);
-            contentType = 'text/tab-separated-values';
             break;
         case 'xml':
-            msg = json2xml({ topic: msg });
-            contentType = 'application/xml';
+            msg = json2xml(msg);
             break;
     }
 
@@ -140,10 +141,10 @@ function sendOne(id, topic, message, verbose = true) {
     }
 
 
-    const p = axios.post(`http://${queueAddress}/api/message`, data, { headers: { 'content-type': contentType }});
+    const p = axios.post(`http://${queueAddress}/api/message`, data);
     if (verbose) {
         p.then(() => console.log('Message successfully sent.'))
-        .catch(err => console.log('Error from queue:', err.response.data));
+        .catch(res => console.log('Error from queue:', res.response.data));
     }
 
     return true;

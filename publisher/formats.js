@@ -1,45 +1,86 @@
 const { parse: csvDecode } = require('csv/lib/sync');
 const { stringify: csvEncode } = require('csv/lib/sync');
-const { xml2json: xmlDecode, json2xml: xmlEncode } = require('xml-js');
+const { parse: xml2js, j2xParser } = require('fast-xml-parser');
+
+const encoderOptions = {
+    attributeNamePrefix : "@_",
+    attrNodeName: "@",
+    textNodeName : "#text",
+    ignoreAttributes : true,
+    cdataTagName: "__cdata",
+    cdataPositionChar: "\\c",
+    format: false,
+    indentBy: "  ",
+    supressEmptyNode: false,
+    rootNodeName: "root"
+};
+
+const decoderOptions = {
+    attributeNamePrefix : "@_",
+    attrNodeName: "attr",
+    textNodeName : "#text",
+    ignoreAttributes : true,
+    ignoreNameSpace : false,
+    allowBooleanAttributes : false,
+    parseNodeValue : true,
+    parseAttributeValue : false,
+    trimValues: true,
+    cdataTagName: "__cdata",
+    cdataPositionChar: "\\c",
+    parseTrueNumberOnly: false,
+    numParseOptions:{
+      hex: true,
+      leadingZeros: true,
+    },
+    arrayMode: false,
+    stopNodes: ["parse-me-as-string"],
+    alwaysCreateTextNode: false
+};
+const js2xml = new j2xParser(encoderOptions);
 
 module.exports = {
     supported: ['json', 'xml', 'csv', 'tsv'],
     csv2json(data) {
-        return csvDecode(data, {
+        const res = csvDecode(data, {
             delimiter: ',',
             header: true,
             skipEmptyLines: true,
+            columns: true,
+            cast: true
         });
+        return res.length === 1 ? res[0] : res;
     },
     tsv2json(data) {
-        return csvDecode(data, {
+        const res = csvDecode(data, {
             delimiter: '\t',
             header: true,
             skipEmptyLines: true,
+            columns: true,
+            cast: true
         });
+        return res.length === 1 ? res[0] : res;
     },
     xml2json(data) {
-        return xmlDecode(data, {
-            compact: true
-        });
+        const res = xml2js(data, decoderOptions);
+        const props = Object.keys(res);
+        return props.length === 1 && res.root ? res.root : res; 
     },
     json2csv(data) {
         data = Array.isArray(data) ? data : [data];
         return csvEncode(data, {
             delimiter: ',',
-            header: true
+            header: true,
+            quote: true
         });
     },
     json2tsv(data) {
         data = Array.isArray(data) ? data : [data];
         return csvEncode(data, {
             delimiter: '\t',
-            header: true
+            header: true,
         });
     },
     json2xml(data) {
-        return xmlEncode(data, {
-            compact: true
-        });
+        return js2xml.parse(data, encoderOptions);
     }
 }

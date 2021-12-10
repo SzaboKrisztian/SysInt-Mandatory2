@@ -10,7 +10,7 @@
     "license": "ISC",
     "dependencies": {
       "axios": "^0.24.0",
-      "xml-js": "^1.6.11",
+      "fast-xml-parser": "^3.21.1",
       "csv": "^5.5.3"
     }
   }

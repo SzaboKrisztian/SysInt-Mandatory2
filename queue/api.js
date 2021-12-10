@@ -114,41 +114,48 @@ fastify.delete('/api/subscriber', (req, res) => {
     res.send();
 });
 
-fastify.addContentTypeParser('application/xml', function (request, payload, done) {
-    let err, body;
-    try {
-        body = xml2json(payload);
-    } catch (error) {
-        err = error;
-    }
-    done(err, body);
-});
 
-fastify.addContentTypeParser('text/csv', function (request, payload, done) {
-    console.log('inside csv content parser');
-    let err, body;
-    try {
-        body = csv2json(payload);
-    } catch (error) {
-        err = error;
-    }
-    done(err, body);
-});
+// fastify.addContentTypeParser(
+//     'text/csv',
+//     { parseAs: 'string' },
+//     function (request, payload, done) {
+//         try {
+//             const data = JSON.parse(payload);
+//             data.message = csv2json(payload.message);
+//             done(null, data);
+//         } catch (error) {
+//             done(error);
+//         }
+//     }
+// );
 
-fastify.addContentTypeParser('text/tab-separated-values', function (request, payload, done) {
-    console.log(payload.toString());
-    console.log('inside tsv content parser', payload.data);
-    let err, body;
-    try {
-        body = tsv2json(String(payload))[0][0];
-    } catch (error) {
-        err = error;
-    }
-    console.log('finished parsing tsv');
-    console.log('error:', err);
-    console.log('body:', body, typeof body, JSON.stringify(body));
-    done(err, body);
-});
+// fastify.addContentTypeParser(
+//     'text/tab-separated-values',
+//     { parseAs: 'string' },
+//     function (request, payload, done) {
+//         try {
+//             const data = JSON.parse(payload);
+//             data.message = tsv2json(payload.message);
+//             done(null, data);
+//         } catch (error) {
+//             done(error);
+//         }
+//     }
+// );
+        
+// fastify.addContentTypeParser(
+//     'application/xml',
+//     { parseAs: 'string' },
+//     function (request, payload, done) {
+//         try {
+//             const data = JSON.parse(payload);
+//             data.message = xml2json(payload.message);
+//             done(null, data);
+//         } catch (error) {
+//             done(error);
+//         }
+//     }
+// );
 
 module.exports.init = function(port = 3000) {
     try {

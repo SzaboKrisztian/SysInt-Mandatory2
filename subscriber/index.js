@@ -7,10 +7,10 @@ const QUEUE_PORT = 3000;
 const QUEUE_HOST = '127.0.0.1';
 const queueAddress = `${QUEUE_HOST}:${QUEUE_PORT}`;
 
-const MIN_SUBS = 3;
-const MAX_SUBS = 5;
-const MIN_TOPICS_PER_SUB = 2;
-const MAX_TOPICS_PER_SUB = 4;
+const MIN_SUBS = 4;
+const MAX_SUBS = 4;
+const MIN_TOPICS_PER_SUB = 6;
+const MAX_TOPICS_PER_SUB = 6;
 
 const numSubs = Math.floor((Math.random() * (MAX_SUBS - MIN_SUBS) + MIN_SUBS))
 const numTopicsPerSub = Math.floor((Math.random() * (MAX_TOPICS_PER_SUB - MIN_TOPICS_PER_SUB) + MIN_TOPICS_PER_SUB))
@@ -22,7 +22,7 @@ const subscribers = Array.from(new Array(numSubs).keys()).map(idx => {
     const chosenTopics = randomChoices(topics, numTopicsPerSub)
         .map(topic => ({
             name: topic,
-            format: randomChoice(formats)
+            format: formats[idx]
         }));
 
     return {
