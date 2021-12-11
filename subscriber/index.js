@@ -1,5 +1,6 @@
 const fastify = require('fastify')({ logger: false });
 const axios = require('axios').default;
+const fmts = require('formats');
 
 const PORT = 7878;
 const HOST = '127.0.0.1';
@@ -7,20 +8,13 @@ const QUEUE_PORT = 3000;
 const QUEUE_HOST = '127.0.0.1';
 const queueAddress = `${QUEUE_HOST}:${QUEUE_PORT}`;
 
-const MIN_SUBS = 4;
-const MAX_SUBS = 4;
-const MIN_TOPICS_PER_SUB = 6;
-const MAX_TOPICS_PER_SUB = 6;
+const numSubs = 4;
 
-const numSubs = Math.floor((Math.random() * (MAX_SUBS - MIN_SUBS) + MIN_SUBS))
-const numTopicsPerSub = Math.floor((Math.random() * (MAX_TOPICS_PER_SUB - MIN_TOPICS_PER_SUB) + MIN_TOPICS_PER_SUB))
-
-const formats = ['json', 'xml', 'csv', 'tsv'];
-const topics = ['people', 'cars', 'phones', 'laptops', 'movies', 'bands'];
+const formats = fmts.supportedFormats;
+const topics = ['people', 'cars', 'transactions', 'posts', 'requests', 'products'];
 
 const subscribers = Array.from(new Array(numSubs).keys()).map(idx => {
-    const chosenTopics = randomChoices(topics, numTopicsPerSub)
-        .map(topic => ({
+    const chosenTopics = topics.map(topic => ({
             name: topic,
             format: formats[idx]
         }));
@@ -55,7 +49,7 @@ try {
                     console.log(`${subscribers[i].name} subscribed to ${result.subscribed.length} topics. ${result.invalid.length} failed.`);
                     subscribers[i].id = result.id;
                 } else {
-                    console.log(`Error while trying to subscribe ${subscribers[i].name}`);
+                    console.log(`Error while trying to subscribe ${subscribers[i].name}: ${e.reason}`);
                 }
             });
             fastify.listen(PORT)

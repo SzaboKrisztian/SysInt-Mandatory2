@@ -1,5 +1,5 @@
 {
-  "name": "subscriber",
+  "name": "common",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -9,8 +9,11 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "fastify": "^3.24.0",
-    "axios": "^0.24.0",
-    "formats": "file:../formats/"
+    "csv": "^5.5.3",
+    "fast-xml-parser": "3.21.1"
+  },
+  "devDependencies": {
+    "jest": "27.4.4",
+    "@types/jest": "27.0.3"
   }
 }

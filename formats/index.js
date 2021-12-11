@@ -39,7 +39,7 @@ const decoderOptions = {
 const js2xml = new j2xParser(encoderOptions);
 
 module.exports = {
-    supported: ['json', 'xml', 'csv', 'tsv'],
+    supportedFormats: ['json', 'xml', 'csv', 'tsv'],
     csv2json(data) {
         const res = csvDecode(data, {
             delimiter: ',',

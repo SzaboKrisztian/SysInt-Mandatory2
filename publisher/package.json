@@ -11,7 +11,12 @@
     "dependencies": {
       "axios": "^0.24.0",
       "fast-xml-parser": "^3.21.1",
-      "csv": "^5.5.3"
+      "csv": "^5.5.3",
+      "faker": "^5.5.3",
+      "formats": "file:../formats/"
+    },
+    "devDependencies": {
+      "@types/faker": "5.5.9"
     }
   }
   

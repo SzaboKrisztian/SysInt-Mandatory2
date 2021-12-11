@@ -7,7 +7,6 @@ const {
     replay,
     post
 } = require('./controller');
-const { xml2json, tsv2json, csv2json } = require('./formats');
 
 fastify.get('/', (req, res) => {
     return {
@@ -113,49 +112,6 @@ fastify.post('/api/message', (req, res) => {
 fastify.delete('/api/subscriber', (req, res) => {
     res.send();
 });
-
-
-// fastify.addContentTypeParser(
-//     'text/csv',
-//     { parseAs: 'string' },
-//     function (request, payload, done) {
-//         try {
-//             const data = JSON.parse(payload);
-//             data.message = csv2json(payload.message);
-//             done(null, data);
-//         } catch (error) {
-//             done(error);
-//         }
-//     }
-// );
-
-// fastify.addContentTypeParser(
-//     'text/tab-separated-values',
-//     { parseAs: 'string' },
-//     function (request, payload, done) {
-//         try {
-//             const data = JSON.parse(payload);
-//             data.message = tsv2json(payload.message);
-//             done(null, data);
-//         } catch (error) {
-//             done(error);
-//         }
-//     }
-// );
-        
-// fastify.addContentTypeParser(
-//     'application/xml',
-//     { parseAs: 'string' },
-//     function (request, payload, done) {
-//         try {
-//             const data = JSON.parse(payload);
-//             data.message = xml2json(payload.message);
-//             done(null, data);
-//         } catch (error) {
-//             done(error);
-//         }
-//     }
-// );
 
 module.exports.init = function(port = 3000) {
     try {

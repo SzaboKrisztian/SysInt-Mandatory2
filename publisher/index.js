@@ -1,6 +1,7 @@
 const axios = require('axios').default;
 const readline = require('readline');
-const { json2csv, json2tsv, json2xml } = require('./formats');
+const { json2csv, json2tsv, json2xml } = require('formats');
+const faker = require('faker');
 
 const r = readline.createInterface({ input: process.stdin, output: process.stdout, prompt: '>> ' });
 
@@ -9,7 +10,7 @@ const QUEUE_PORT = 3000;
 const queueAddress = `${QUEUE_HOST}:${QUEUE_PORT}`;
 
 const formats = ['json', 'xml', 'csv', 'tsv'];
-const topics = ['people', 'cars', 'phones', 'laptops', 'movies', 'bands'];
+const topics = ['people', 'cars', 'transactions', 'posts', 'requests', 'products'];
 
 const topicData = formats.map(fmt => topics.map(t => ({ name: t, format: fmt })));
 
@@ -17,7 +18,7 @@ const promises = topicData.map(topics => axios.post(`http://${queueAddress}/api/
 
 const publishers = {};
 
-Promise.allSettled(promises).then(async (res) => {
+Promise.allSettled(promises).then((res) => {
     for (let i = 0; i < res.length; i += 1) {
         if (res[i].status === 'fulfilled') {
             publishers[res[i].value.data.id] = {};
@@ -81,27 +82,76 @@ function showHelp(arg) {
     
 }
 
-function sendMessage(id, topic, message) {
-    if (!id || !topic || !message) {
+async function sendMessage(id, topic, message) {
+    if (!id || !topic) {
         showHelp('send');
     }
 
     if (id === '*') {
-        let sent = 0;
-        Object.keys(publishers).forEach(id => {
-            try {
-                if (sendOne(id, topic, message, false)) {
-                    sent += 1;
-                }
-            } catch {}
-        });
-        console.log(`Sent message from ${sent}/${Object.keys(publishers).length} publishers.`);
+        const ids = Object.keys(publishers);
+        const promises = ids.map(async (id) => await sendOne(id, topic, !message ? generateMessage(topic) : message, false));
+        const result = await Promise.allSettled(promises);
+        const numSent = result.filter(r => r.status === 'fulfilled').length;
+        console.log(`Sent message from ${numSent}/${ids.length} publishers.`);
     } else {
         if (id.length < 20) {
             const idx = parseInt(id) - 1;
             id = Object.keys(publishers)[idx];
         }
-        sendOne(id, topic, message);
+        await sendOne(id, topic, !message ? generateMessage(topic) : message);
+    }
+}
+
+function generateMessage(topic) {
+    switch(topic) {
+        case 'people':
+            return {
+                firstName: faker.name.firstName(),
+                lastName: faker.name.lastName(),
+                gender: faker.name.gender(),
+                age: faker.datatype.number(45) + 20,
+                location: `${faker.address.county()}, ${faker.address.country}`,
+            };
+        case 'cars':
+            return {
+                make: faker.vehicle.manufacturer(),
+                model: faker.vehicle.model(),
+                year: faker.datatype.number(30) + 1989,
+                color: faker.vehicle.color(),
+                vin: faker.vehicle.vin(),
+            }
+        case 'products':
+            return {
+                name: faker.commerce.productName(),
+                category: faker.commerce.product(),
+                color: faker.commerce.color(),
+                price: faker.commerce.price(),
+                description: faker.commerce.productDescription()
+            }
+        case 'transactions':
+            return {
+                source: faker.finance.account(),
+                sourceName: faker.finance.accountName(),
+                destination: faker.finance.iban(),
+                currency: faker.finance.currencyCode(),
+                amount: faker.finance.amount()
+            }
+        case 'requests':
+            return {
+                method: faker.internet.httpMethod(),
+                source: faker.internet.ip(),
+                userAgent: faker.internet.userAgent(),
+                timestamp: faker.date.recent(),
+                mimeType: faker.system.mimeType()
+            }
+        case 'posts':
+            return {
+                author: `${faker.name.firstName()} ${faker.name.lastName()}`,
+                title: faker.lorem.words(),
+                text: faker.lorem.paragraph(),
+                timestamp: faker.date.recent(),
+                upvotes: faker.datatype.number(1000)
+            }
     }
 }
 
@@ -109,15 +159,15 @@ function sendOne(id, topic, message, verbose = true) {
     const format = publishers[id][topic];
     if (verbose && !format) {
         console.log('Unknown id and/or topic. Aborting.');
-        return false;
+        return Promise.reject(false);
     }
 
     let msg;
     try {
-        msg = JSON.parse(message);
+        msg = typeof message === 'string' ? JSON.parse(message) : message;
     } catch {
         console.log('Invalid JSON:', message);
-        return false;
+        return Promise.reject(false);
     }
     switch (format) {
         case 'csv':
@@ -140,12 +190,12 @@ function sendOne(id, topic, message, verbose = true) {
         message: msg
     }
 
-
+    console.log({ message: msg });
     const p = axios.post(`http://${queueAddress}/api/message`, data);
     if (verbose) {
         p.then(() => console.log('Message successfully sent.'))
         .catch(res => console.log('Error from queue:', res.response.data));
     }
 
-    return true;
+    return Promise.resolve(true);
 }

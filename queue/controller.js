@@ -1,4 +1,4 @@
-const fmts = require('./formats');
+const fmts = require('../formats');
 const { getMessages, saveMessage, savePubsSubs, loadPubsSubs, clearTopic, clearAllTopics, deletePubSubFile } = require('./persistence');
 const { generateId, log } = require('./utils')
 const axios = require('axios').default;
@@ -30,6 +30,7 @@ const args = process.argv.slice(2);
 const coldStart = args.includes('--cold');
 const reset = args.includes('--reset');
 if (reset) {
+    console.log('\nQueue stared with reset flag. Not loading any saved data.');
     deletePubSubFile();
     clearAllTopics();
 }
@@ -80,7 +81,7 @@ module.exports.subscribe = function subscribe(args) {
 
     let id = args?.id ?? generateId();
 
-    const invalidEntries = topics.filter(t => !fmts.supported.includes(t.format));
+    const invalidEntries = topics.filter(t => !fmts.supportedFormats.includes(t.format));
 
     if (!db.subscribers[id]) {
         db.subscribers[id] = {};
@@ -164,7 +165,7 @@ module.exports.register = function register(args) {
     }
     const publisher = db.publishers[id];
 
-    const invalidEntries = topics.filter(t => !fmts.supported.includes(t.format));
+    const invalidEntries = topics.filter(t => !fmts.supportedFormats.includes(t.format));
 
     const validEntries = topics.filter(t => !invalidEntries.includes(t));
     validEntries.forEach(entry => {
@@ -206,7 +207,7 @@ module.exports.post = function post(args) {
                 jsonMessage = fmts.tsv2json(message);
                 break;
             case 'json':
-                jsonMessage = JSON.parse(message);
+                jsonMessage = message;
                 break;
         }
 
@@ -270,7 +271,7 @@ module.exports.replay = async function replay(args) {
     if (!db.topics[topic]) {
         throw new Error("Unknown topic");
     }
-    if (!fmts.supported.includes(format)) {
+    if (!fmts.supportedFormats.includes(format)) {
         throw new Error("Unknown format");
     }
 
