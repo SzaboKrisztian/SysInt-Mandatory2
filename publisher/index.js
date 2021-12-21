@@ -59,7 +59,7 @@ function executeCommand(command) {
 }
 
 function showHelp(arg) {
-    arg = arg.startsWith('.') ? arg.substr(1) : arg;
+    arg = !!arg && arg.startsWith('.') ? arg.substr(1) : arg;
     switch (arg) {
         case 'send':
             console.log('Usage:\n.send <id> <topic> <message> - send a message to the queue from a publisher');
@@ -110,7 +110,7 @@ function generateMessage(topic) {
                 lastName: faker.name.lastName(),
                 gender: faker.name.gender(),
                 age: faker.datatype.number(45) + 20,
-                location: `${faker.address.county()}, ${faker.address.country}`,
+                location: `${faker.address.county()}, ${faker.address.country()}`,
             };
         case 'cars':
             return {

@@ -26,20 +26,22 @@ module.exports.saveMessage = async function(topic, message) {
 }
 
 module.exports.getMessages = async function(topic, timestamp) {
-    timestamp = timestamp && typeof timestamp === 'string' ? parseInt(timestamp) : timestamp;
-
     const topicPath = path.resolve(FS_ROOT, topic);
     if (!fs.existsSync(topicPath)) {
         fs.mkdirSync(topicPath);
     }
 
-    return Promise.allSettled(fsp.readdir(topicPath, { withFileTypes: true })
+    const files = await fsp.readdir(topicPath, { withFileTypes: true })
         .then(data => data.filter(item => item.isFile() && item.name.endsWith('json')))
         .then(files => files.map(file => file.name))
-        .map(async filename => ({
-            timestamp: filename.substring(0, filename.indexOf('.')),
-            content: JSON.parse(await fsp.readFile(path.resolve(topicPath, filename)))
-        })));
+        .then(filenames => timestamp ? filenames.filter(name => name >= timestamp) : filenames);
+
+    const promises = files.map(async filename => ({
+        timestamp: filename.substring(0, filename.indexOf('.')),
+        content: JSON.parse(await fsp.readFile(path.resolve(topicPath, filename)))
+    }));
+    
+    return Promise.allSettled(promises).then(messages => messages.map(m => m.value.content));
 }
 
 module.exports.savePubsSubs = async function(data) {

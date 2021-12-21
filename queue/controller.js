@@ -30,7 +30,7 @@ const args = process.argv.slice(2);
 const coldStart = args.includes('--cold');
 const reset = args.includes('--reset');
 if (reset) {
-    console.log('\nQueue stared with reset flag. Not loading any saved data.');
+    console.log('\nQueue stared with reset flag. Clearing all previously saved data.');
     deletePubSubFile();
     clearAllTopics();
 }
@@ -44,7 +44,15 @@ const db = persistedData
         publishers: {},
         subscribers: {},
         topics: {},
-    }
+    };
+
+if (Object.keys(db.publishers).length > 0) {
+    const publisherTopics = new Set(Object.keys(db.publishers).flatMap(id => Object.keys(db.publishers[id])));
+
+    publisherTopics.forEach(topic => db.topics[topic] = []);
+}
+
+console.log({ db });
 
 setInterval(() => {
     let topics = 0;
@@ -291,6 +299,11 @@ module.exports.replay = async function replay(args) {
             break;
     }
 
-    return getMessages(topic, timestamp)
-        .then(messages => convert(messages));
+    try {
+        const messages = await getMessages(topic, timestamp);
+        return convert(messages);
+    } catch (err) {
+        console.error(err);
+        return [];
+    }
 }
